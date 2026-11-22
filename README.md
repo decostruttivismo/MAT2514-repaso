@@ -6,3 +6,4 @@ Material de repaso para el examen. Sitio web: https://decostruttivismo.github.io
 - `pdf/MAT2514_apuntes_completos.pdf` — apuntes completos (Clases 1 a 41).
 - `pdf/MAT2514_hoja_enunciados.pdf` — hoja de enunciados para el examen.
 - `pdf/MAT2514_errores_frecuentes.pdf` — errores frecuentes en la guía del examen.
+- `pdf/MAT2514_quiz_repaso.pdf` — el quiz (verdadero o falso) con respuestas y justificaciones, ejemplos, ejercicios con soluciones y los enunciados de la guía. Versión PDF para quien no quiera usar la página web.

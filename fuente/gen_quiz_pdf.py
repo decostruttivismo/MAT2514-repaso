@@ -5,8 +5,35 @@ Q, GUIA, LM = d["Q"], d["GUIA"], d["LM"]
 out = open(sys.argv[2], "w", encoding="utf-8")
 w = lambda s="": out.write(s + "\n")
 
+# Destinos con nombre del PDF de apuntes (para enlazar "Teorema 20.16", etc.)
+APUNTES = "https://decostruttivismo.github.io/MAT2514-repaso/pdf/MAT2514_apuntes_completos.pdf"
+DESTS = set(json.load(open(sys.argv[3], encoding="utf-8"))) if len(sys.argv) > 3 else None
+PG = {g["n"] for g in GUIA}
 
-def tx(s):
+
+def ap(dest, texto):
+    """Enlace a un destino del PDF de apuntes (si existe)."""
+    if DESTS is not None and dest not in DESTS:
+        return texto
+    return r"\href{%s\#nameddest=%s}{%s}" % (APUNTES, dest, texto)
+
+
+def prob(n, texto):
+    return r"\hyperlink{prob-%d}{%s}" % (n, texto) if n in PG else texto
+
+
+def enlaces(p):
+    """Enlaza referencias a los apuntes y a los problemas de la guía (texto fuera de math)."""
+    p = re.sub(r"(Teorema|Proposición|Lema|Corolario|Definición|Ejemplo|Observación)(s?) (\d+\.\d+)",
+               lambda m: ap("teorema." + m.group(3), m.group(0)), p)
+    p = re.sub(r"Ejercicio (A?\w+\.\d+)", lambda m: ap("ejercicio." + m.group(1), m.group(0)), p)
+    p = re.sub(r"(Problemas? )((?:\d+(?:\([a-c]\))?)(?:(?:, | y )\d+(?:\([a-c]\))?)*)",
+               lambda m: m.group(1) + re.sub(r"(\d+)(\([a-c]\))?",
+                                             lambda k: prob(int(k.group(1)), k.group(0)), m.group(2)), p)
+    return p
+
+
+def tx(s, links=True):
     """Convierte un texto (HTML ligero + LaTeX en $...$) a LaTeX."""
     parts = re.split(r"(\\\[.*?\\\]|\$[^$]*\$)", s)
     res = []
@@ -19,6 +46,8 @@ def tx(s):
             p = p.replace(a, b)
         p = re.sub(r"<b>(.*?)</b>", r"\\textbf{\1}", p)
         p = p.replace("«", "\\guillemotleft{}").replace("»", "\\guillemotright{}")
+        if links:
+            p = enlaces(p)
         res.append(p)
     return "".join(res)
 
@@ -50,14 +79,14 @@ def pasos(lst):
 
 
 def cabecera(i, q):
-    cl = ("Clases " if len(q["cl"]) > 1 else "Clase ") + ", ".join(map(str, q["cl"]))
-    return r"\textsc{%s} · %s" % (tx(q["tema"]), cl)
+    cl = ("Clases " if len(q["cl"]) > 1 else "Clase ") + ", ".join(ap("section.%d" % c, str(c)) for c in q["cl"])
+    return r"\textsc{%s} · %s" % (tx(q["tema"], False), cl)
 
 
 def probs(pr):
     if not pr:
         return ""
-    return ("Problemas " if len(pr) > 1 else "Problema ") + ", ".join(map(str, pr))
+    return ("Problemas " if len(pr) > 1 else "Problema ") + ", ".join(prob(n, str(n)) for n in pr)
 
 
 w(r"""\documentclass[11pt,a4paper]{article}
@@ -68,9 +97,9 @@ w(r"""\documentclass[11pt,a4paper]{article}
 \usepackage{amsmath,amssymb,mathtools}
 \usepackage[margin=2.3cm]{geometry}
 \usepackage{enumitem,xcolor,titlesec}
-\usepackage[hidelinks]{hyperref}
+\usepackage[colorlinks,linkcolor=acento,urlcolor=acento,citecolor=acento,bookmarksnumbered]{hyperref}
 \usepackage{needspace}
-\definecolor{acento}{HTML}{1F5F8B}\definecolor{ok}{HTML}{1F7A4A}\definecolor{bad}{HTML}{B23A2E}
+\usepackage{xcolor}\definecolor{acento}{HTML}{1F5F8B}\definecolor{ok}{HTML}{1F7A4A}\definecolor{bad}{HTML}{B23A2E}
 \newcommand{\R}{\mathbb{R}}\newcommand{\N}{\mathbb{N}}\newcommand{\Q}{\mathbb{Q}}
 \newcommand{\K}{\mathcal{K}}\newcommand{\M}{\mathbb{M}}
 \DeclareMathOperator{\diam}{diam}\DeclareMathOperator{\dis}{dis}\DeclareMathOperator{\dist}{dist}
@@ -102,17 +131,17 @@ Cada afirmación es verdadera o falsa, y cada una corresponde a un error que des
 \item \textbf{Parte 4.} Las soluciones de los ejercicios.
 \item \textbf{Apéndice.} Los enunciados de los problemas de la guía del examen, a los que se refieren las respuestas.
 \end{itemize}
-Las referencias del tipo ``Teorema 20.16'' remiten a los apuntes completos (\texttt{MAT2514\_apuntes\_completos.pdf}).
-""" % len(Q))
+\textbf{Cómo navegar.} El documento es clickeable. En la Parte 1, el número de cada afirmación lleva a su respuesta; desde la respuesta se va al ejemplo y ejercicio, y desde el ejercicio a su solución. Las menciones de un problema de la guía llevan a su enunciado en el Apéndice. Las referencias del tipo ``Teorema 20.16'' y los números de clase abren los \href{%s}{apuntes completos} en el lugar exacto (se necesita conexión a internet).
+""" % (len(Q), APUNTES))
 w(r"\tableofcontents\newpage")
 
 # Parte 1
 w(r"\parte{Parte 1. Las afirmaciones}")
-w(r"Marque V o F. La respuesta está en la Parte 2, con el mismo número.")
+w(r"Marque V o F. La respuesta está en la Parte 2, con el mismo número: haga clic en el número para ir a ella.")
 w(r"\begin{enumerate}[leftmargin=2.2em,itemsep=8pt,label=\textbf{\arabic*.}]")
 for i, q in enumerate(Q):
-    w(r"\item \label{q%d}{\small %s}\hfill \textbf{V}\,\fbox{\rule{0pt}{6pt}\hspace{6pt}}\quad\textbf{F}\,\fbox{\rule{0pt}{6pt}\hspace{6pt}}\par %s"
-      % (i + 1, cabecera(i, q), tx(q["s"])))
+    w(r"\item[\hyperlink{r-%d}{\textbf{%d.}}] \hypertarget{q-%d}{}{\small %s}\hfill \textbf{V}\,\fbox{\rule{0pt}{6pt}\hspace{6pt}}\quad\textbf{F}\,\fbox{\rule{0pt}{6pt}\hspace{6pt}}\par %s\hfill{\footnotesize\hyperlink{r-%d}{ver respuesta}}"
+      % (i + 1, i + 1, i + 1, cabecera(i, q), tx(q["s"]), i + 1))
 w(r"\end{enumerate}")
 
 # Parte 2
@@ -121,7 +150,7 @@ for i, q in enumerate(Q):
     n = i + 1
     color, val = ("ok", "Verdadero") if q["v"] else ("bad", "Falso")
     w(r"\needspace{6\baselineskip}")
-    w(r"\subsection*{%d.\ \textcolor{%s}{%s}}\label{r%d}" % (n, color, val, n))
+    w(r"\subsection*{\hypertarget{r-%d}{}%d.\ \textcolor{%s}{%s}}" % (n, n, color, val))
     w(r"{\small %s}\par" % cabecera(i, q))
     w(r"\emph{%s}" % tx(q["s"]))
     w(r"\bloque{Justificación}")
@@ -132,7 +161,7 @@ for i, q in enumerate(Q):
     if q.get("g"):
         w(r"\bloque{En la guía del examen}")
         pasos(q["g"])
-    refs = [LM[x][1] for x in q.get("l", []) if x in LM]
+    refs = [ap(LM[x][0], LM[x][1]) for x in q.get("l", []) if x in LM]
     linea = []
     if refs:
         linea.append(r"\textbf{En los apuntes:} " + " · ".join(refs))
@@ -140,7 +169,7 @@ for i, q in enumerate(Q):
         linea.append(r"\textbf{Guía:} " + probs(q["pr"]))
     if linea:
         w(r"\par\smallskip{\small " + r" \quad ".join(linea) + "}")
-    w(r"\par{\small Ejemplo y ejercicio: Parte 3, pregunta %d.}" % n)
+    w(r"\par{\small \hyperlink{e-%d}{Ejemplo y ejercicio de esta pregunta} \quad·\quad \hyperlink{q-%d}{volver a la afirmación}}" % (n, n))
 
 # Parte 3
 w(r"\newpage\parte{Parte 3. Ejemplos y ejercicios}")
@@ -149,15 +178,16 @@ for i, q in enumerate(Q):
     n = i + 1
     e, x = q["e"], q["x"]
     w(r"\needspace{6\baselineskip}")
-    w(r"\subsection*{Pregunta %d \normalfont\small(%s)}" % (n, cabecera(i, q)))
+    w(r"\subsection*{\hypertarget{e-%d}{}Pregunta %d \normalfont\small(%s)}" % (n, n, cabecera(i, q)))
     ref = ""
     if e.get("l") and e["l"] in LM:
-        ref = r" {\small(en los apuntes: %s)}" % LM[e["l"]][1]
+        ref = r" {\small(en los apuntes: %s)}" % ap(LM[e["l"]][0], LM[e["l"]][1])
     w(r"\bloque{Ejemplo}")
     w(r"\textit{%s}%s" % (tx(e["t"]), ref))
     pasos(e["p"])
-    w(r"\bloque{Ejercicio %d}" % n)
+    w(r"\bloque{\hypertarget{x-%d}{}Ejercicio %d}" % (n, n))
     w(tx(x["t"]))
+    w(r"\par{\small \hyperlink{s-%d}{Ver solución} \quad·\quad \hyperlink{r-%d}{volver a la respuesta de la pregunta %d}}" % (n, n, n))
 
 # Parte 4
 w(r"\newpage\parte{Parte 4. Soluciones de los ejercicios}")
@@ -165,17 +195,18 @@ for i, q in enumerate(Q):
     n = i + 1
     x = q["x"]
     w(r"\needspace{6\baselineskip}")
-    w(r"\subsection*{Solución del ejercicio %d}" % n)
+    w(r"\subsection*{\hypertarget{s-%d}{}Solución del ejercicio %d}" % (n, n))
     w(r"\emph{%s}" % tx(x["t"]))
     pasos(x["p"])
+    w(r"\par{\small \hyperlink{x-%d}{volver al ejercicio} \quad·\quad \hyperlink{r-%d}{respuesta de la pregunta %d}}" % (n, n, n))
 
 # Apéndice
 w(r"\newpage\parte{Apéndice. Problemas de la guía del examen}")
-w(r"La guía tiene 17 problemas. Los Problemas 3, 7 y 8 se resolvieron en el taller de la Clase 43 y no estarán en el examen; los Problemas 15 y 16 son complementarios.")
+w(r"La guía tiene 17 problemas. Los Problemas~3, 7 y 8 se resolvieron en el taller de la Clase 43 y no estarán en el examen; los Problemas 15 y 16 son complementarios.")
 for g in GUIA:
     w(r"\needspace{5\baselineskip}")
     comp = r" {\normalfont\small(complementario)}" if g.get("comp") else ""
-    w(r"\subsection*{Problema %d. %s%s}" % (g["n"], tx(g["t"]), comp))
+    w(r"\subsection*{\hypertarget{prob-%d}{}Problema %d. %s%s}" % (g["n"], g["n"], tx(g["t"], False), comp))
     if g.get("intro"):
         w(tx(g["intro"]))
     w(r"\begin{enumerate}[label=(\alph*),leftmargin=2.2em,itemsep=2pt]")
@@ -186,7 +217,7 @@ for g in GUIA:
         w(r"{\small\itshape %s}" % tx(g["sug"]))
     its = sorted(g.get("its", []), key=lambda t: t["i"])
     if its:
-        w(r"\par{\small\textbf{Preguntas del quiz relacionadas:} %s}" % ", ".join(str(t["i"]) for t in its))
+        w(r"\par{\small\textbf{Preguntas del quiz relacionadas:} %s}" % ", ".join(r"\hyperlink{r-%d}{%d}" % (t["i"], t["i"]) for t in its))
 
 w(r"\end{document}")
 out.close()
